@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Simulador de Persecuciones y Encuentros | MRU y MRUA</title>
+<style>
+:root{--a:#38bdf8;--b:#fb7185;--ok:#34d399;--bg:#090d16;--card:#111827;--bd:#334155;--tx:#e2e8f0;--mut:#94a3b8}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:14px system-ui,sans-serif}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:12px 16px;border-bottom:1px solid var(--bd)}
+header a{color:var(--a);text-decoration:none;font-weight:600}
+h1{font-size:17px;margin:0}
+h3{display:flex;justify-content:space-between;align-items:center;margin:0 0 8px;font-size:13px}
+.wrap{max-width:1400px;margin:auto;padding:16px;display:grid;grid-template-columns:310px 1fr;gap:16px}
+section{min-width:0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row,#pre{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.row{margin-top:8px}.row input{flex:1;min-width:120px}
+label{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--mut)}
+input[type=number]{width:80px}
+input[type=number],select{background:#0f172a;color:var(--tx);border:1px solid var(--bd);border-radius:6px;padding:3px}
+input[type=range]{width:100%}
+input:disabled{opacity:.35}
+button{background:#1e293b;color:var(--tx);border:1px solid var(--bd);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover{border-color:var(--a)}
+button.on{background:var(--c);color:#000;font-weight:700}
+canvas{display:block;width:100%;border-radius:8px;touch-action:none}
+#cx,#cv{cursor:ew-resize}
+#ban{border-left:4px solid var(--bd);font-size:15px}
+#ban.ok{border-color:var(--ok)}#ban.no{border-color:var(--b)}
+#ban.flash{background:#065f46;border-color:var(--ok);font-size:18px}
+#hud{font:12px monospace;color:var(--mut);margin-bottom:8px}
+.tbl{overflow-x:auto;max-height:280px}
+table{width:100%;border-collapse:collapse;font:12px monospace}
+td,th{padding:4px 8px;border-bottom:1px solid var(--bd);text-align:right}
+td:first-child,th:first-child{text-align:left}
+tr.hit{background:#064e3b;color:#a7f3d0;font-weight:700}
+.okc{color:var(--ok)}.noc{color:var(--b)}
+@media(max-width:1000px){.wrap,.grid2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <a href="index.html">← Menú Principal</a>
+  <h1>LabCinemática 1D · Persecuciones y Encuentros</h1>
+  <div id="pre"></div>
+</header>
+<main class="wrap">
+  <aside id="side"></aside>
+  <section>
+    <div id="ban" class="card"></div>
+    <div class="card">
+      <div id="hud"></div>
+      <canvas id="track" data-h="210"></canvas>
+      <div class="row">
+        <button id="bPlay">▶ Iniciar</button><button id="bReset">↺ Reiniciar</button><button id="bEnc">🎯 Ir al encuentro</button>
+        <input type="range" id="ts" min="0" max="20" step="0.01" value="0">
+        <select id="spd"><option value="0.25">0.25x</option><option value="0.5">0.5x</option><option value="1" selected>1x</option><option value="2">2x</option></select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Posición x(t) <small>(arrastra sobre la gráfica)</small></h3><canvas id="cx" data-h="260"></canvas></div>
+      <div class="card"><h3>Velocidad v(t) <small>(arrastra sobre la gráfica)</small></h3><canvas id="cv" data-h="260"></canvas></div>
+    </div>
+    <div class="card" id="rep"></div>
+  </section>
+</main>
+
+<script>
+// ---------- 1. ESTADO Y FÓRMULAS ----------
+const $=id=>document.getElementById(id),AC='#38bdf8',BC='#fb7185',OK='#34d399',PAD={l:48,r:14,t:14,b:26},
+IC=['🚓','🏎️','🏍️','🚛','🚑'];
+const S={A:{},B:{},tmax:20,t:0,play:false};let R,last=0;
+const P={ // [vehículo A, vehículo B, t_max]
+ pursuit:[{icon:IC[0],mru:0,xi:0,vi:0,a:4},{icon:IC[1],mru:1,xi:72,vi:18,a:0},20],
+ headon:[{icon:IC[4],mru:0,xi:0,vi:20,a:1},{icon:IC[3],mru:1,xi:350,vi:-15,a:0},15],
+ double:[{icon:IC[2],mru:0,xi:0,vi:28,a:-2},{icon:IC[1],mru:1,xi:40,vi:12,a:0},18],
+ never:[{icon:IC[0],mru:1,xi:0,vi:15,a:0},{icon:IC[1],mru:1,xi:60,vi:22,a:0},20]};
+const L={pursuit:'🚓 Persecución',headon:'⚡ Encuentro frontal',double:'🔄 Doble encuentro',never:'🚫 No se alcanzan'};
+const obj=v=>v?S[v]:S,
+ acc=v=>v.mru?0:v.a,                          // en MRU a = 0
+ pos=(v,t)=>v.xi+v.vi*t+.5*acc(v)*t*t,        // xf = xi + vi·t + ½·a·t²
+ vel=(v,t)=>v.vi+acc(v)*t;                    // vf = vi + a·t
+
+// ---------- 2. RESOLUCIÓN DEL ENCUENTRO: xA(t) = xB(t) ----------
+function analyze(){
+ const A=S.A,B=S.B,q=.5*(acc(A)-acc(B)),b=A.vi-B.vi,c=A.xi-B.xi,E=1e-9;let all=[],d=null;
+ if(Math.abs(q)>E){d=b*b-4*q*c;if(d>=-E){const s=Math.sqrt(Math.max(d,0));all=[(-b-s)/(2*q),(-b+s)/(2*q)]}}
+ else if(Math.abs(b)>E)all=[-c/b];
+ all=[...new Set(all)].sort((x,y)=>x-y);
+ R={q,b,c,d,all,r:all.filter(t=>t>E),same:Math.abs(q)+Math.abs(b)+Math.abs(c)<E};
+}
+
+// ---------- 3. CONTROLES (se generan por JS) ----------
+const field=(v,k,l,min,max,s,u)=>`<label>${l} <span><input type="number" data-v="${v}" data-k="${k}" step="${s}"> ${u}</span></label>
+ <input type="range" data-v="${v}" data-k="${k}" min="${min}" max="${max}" step="${s}">`;
+const card=(id,col)=>`<div class="card" style="--c:${col}"><h3 style="color:${col}">Vehículo ${id}
+ <span><button data-v="${id}" data-m="1">MRU</button> <button data-v="${id}" data-m="0">MRUA</button>
+ <select data-v="${id}" data-k="icon">${IC.map(e=>`<option>${e}</option>`).join('')}</select></span></h3>
+ ${field(id,'xi','Posición inicial xᵢ',-200,500,1,'m')}${field(id,'vi','Velocidad inicial vᵢ',-50,80,.5,'m/s')}${field(id,'a','Aceleración a',-15,15,.1,'m/s²')}</div>`;
+$('side').innerHTML=card('A',AC)+card('B',BC)+`<div class="card"><h3>Horizonte</h3>${field('','tmax','Tiempo máximo',5,100,1,'s')}</div>`;
+$('pre').innerHTML=Object.entries(L).map(([k,t])=>`<button data-p="${k}">${t}</button>`).join('');
+
+function sync(skip){ // estado → todos los inputs
+ document.querySelectorAll('[data-k]').forEach(el=>{const o=obj(el.dataset.v);
+  if(el!==skip)el.value=o[el.dataset.k];
+  if(el.dataset.k==='a')el.disabled=!!o.mru});
+ document.querySelectorAll('[data-m]').forEach(b=>b.classList.toggle('on',+b.dataset.m===+S[b.dataset.v].mru));
+}
+document.addEventListener('input',e=>{ // un solo listener para todos los controles
+ const el=e.target,d=el.dataset;if(!d.k)return;
+ const val=d.k==='icon'?el.value:parseFloat(el.value);if(val!==val)return;
+ obj(d.v)[d.k]=d.k==='tmax'?Math.max(1,val):val;S.t=Math.min(S.t,S.tmax);sync(el);update();
+});
+document.addEventListener('click',e=>{
+ const d=e.target.dataset;
+ if(d.m!=null){S[d.v].mru=+d.m;sync();update()}
+ if(d.p)preset(d.p);
+});
+function preset(k){const[a,b,t]=P[k];play(false);Object.assign(S.A,a);Object.assign(S.B,b);S.tmax=t;S.t=0;sync();update()}
+
+// ---------- 4. DIBUJO (canvas) ----------
+function ctxOf(cv){ // ajusta el canvas a pantallas de alta densidad
+ const d=devicePixelRatio||1,w=cv.getBoundingClientRect().width,h=+cv.dataset.h;
+ cv.width=w*d;cv.height=h*d;cv.style.height=h+'px';
+ const c=cv.getContext('2d');c.setTransform(d,0,0,d,0,0);return[c,w,h];
+}
+function track(near,en){
+ const[c,w,h]=ctxOf($('track')),T=S.tmax;let lo=1e9,hi=-1e9;
+ for(let i=0;i<=60;i++)for(const v of[S.A,S.B]){const x=pos(v,T*i/60);lo=Math.min(lo,x);hi=Math.max(hi,x)}
+ const mid=(lo+hi)/2,sp=Math.max(60,hi-lo);lo=mid-sp/2;hi=mid+sp/2;
+ const sx=x=>30+(x-lo)/(hi-lo)*(w-60);
+ c.fillStyle='#0b1220';c.fillRect(0,0,w,h);
+ c.fillStyle='#1e293b';c.fillRect(0,70,w,100);
+ c.strokeStyle='#475569';c.lineWidth=2;c.setLineDash([12,12]);c.beginPath();c.moveTo(0,120);c.lineTo(w,120);c.stroke();c.setLineDash([]);
+ const raw=(hi-lo)/6,mag=10**Math.floor(Math.log10(raw)),st=mag*(raw/mag<2?1:raw/mag<5?2:5);
+ c.font='11px monospace';c.textAlign='center';c.fillStyle='#94a3b8';
+ for(let m=Math.ceil(lo/st)*st;m<=hi;m+=st){c.fillRect(sx(m),170,1,6);c.fillText(Math.round(m*100)/100+' m',sx(m),192)}
+ en.forEach(t=>{ // marcador del punto de encuentro
+  const x=sx(pos(S.A,t));c.strokeStyle=OK;c.lineWidth=2;c.setLineDash([5,4]);
+  c.beginPath();c.moveTo(x,46);c.lineTo(x,170);c.stroke();c.setLineDash([]);
+  c.fillStyle=OK;c.font='bold 11px monospace';c.fillText('🎯 ENCUENTRO',x,58)});
+ [[S.A,100,AC,'A',-28],[S.B,140,BC,'B',28]].forEach(([v,y,col,n,dy])=>{
+  const p=pos(v,S.t),vv=vel(v,S.t),x=sx(p);
+  c.font='32px serif';c.textBaseline='middle';c.fillStyle='#fff';c.fillText(v.icon,x,y);
+  const txt=`${n} ${vv>.05?'▶':vv<-.05?'◀':'■'} ${p.toFixed(1)} m · ${vv.toFixed(1)} m/s`;
+  c.font='bold 11px monospace';const tw=c.measureText(txt).width+12;
+  c.fillStyle='rgba(9,13,22,.9)';c.fillRect(x-tw/2,y+dy-9,tw,18);
+  c.strokeStyle=col;c.lineWidth=1.2;c.strokeRect(x-tw/2,y+dy-9,tw,18);
+  c.fillStyle=col;c.fillText(txt,x,y+dy)});
+ if(near!=null){ // cartel parpadeante
+  c.fillStyle=Math.floor(performance.now()/200)%2?'#065f46':'#047857';c.fillRect(w/2-120,6,240,34);
+  c.strokeStyle=OK;c.lineWidth=2;c.strokeRect(w/2-120,6,240,34);
+  c.fillStyle='#ecfdf5';c.font='bold 20px sans-serif';c.fillText('🎯 ¡ENCUENTRO!',w/2,24)}
+}
+function chart(id,f){ // f = pos o vel
+ const[c,w,h]=ctxOf($(id)),pw=w-PAD.l-PAD.r,ph=h-PAD.t-PAD.b,N=100,T=S.tmax,
+  ys=[...Array(N+1)].map((_,i)=>[f(S.A,T*i/N),f(S.B,T*i/N)]);
+ let lo=Math.min(...ys.flat()),hi=Math.max(...ys.flat());if(hi-lo<1e-6){lo-=5;hi+=5}
+ const m=(hi-lo)*.1;lo-=m;hi+=m;
+ const px=t=>PAD.l+t/T*pw,py=y=>PAD.t+ph-(y-lo)/(hi-lo)*ph;
+ c.fillStyle='#0b1220';c.fillRect(0,0,w,h);c.font='10px monospace';c.lineWidth=1;
+ for(let i=0;i<=5;i++){const y=lo+(hi-lo)*i/5,t=T*i/5;
+  c.strokeStyle='#243044';c.beginPath();c.moveTo(PAD.l,py(y));c.lineTo(w-PAD.r,py(y));c.moveTo(px(t),PAD.t);c.lineTo(px(t),PAD.t+ph);c.stroke();
+  c.fillStyle='#94a3b8';c.textAlign='right';c.fillText(y.toFixed(1),PAD.l-5,py(y)+3);c.textAlign='center';c.fillText(t.toFixed(1)+' s',px(t),h-8)}
+ [AC,BC].forEach((col,k)=>{c.strokeStyle=col;c.lineWidth=2.5;c.beginPath();
+  ys.forEach((p,i)=>c[i?'lineTo':'moveTo'](px(T*i/N),py(p[k])));c.stroke()});
+ if(f===pos)R.r.filter(t=>t<=T).forEach(t=>{
+  const x=px(t),y=py(pos(S.A,t)),left=x>w-90;
+  c.fillStyle=OK;c.beginPath();c.arc(x,y,6,0,7);c.fill();
+  c.textAlign=left?'right':'left';c.font='bold 10px monospace';c.fillText('ENCUENTRO',left?x-9:x+9,y-8)});
+ c.strokeStyle=OK;c.lineWidth=1.5;c.setLineDash([4,4]);c.beginPath();c.moveTo(px(S.t),PAD.t);c.lineTo(px(S.t),PAD.t+ph);c.stroke();c.setLineDash([]);
+ [[S.A,AC],[S.B,BC]].forEach(([v,col])=>{c.fillStyle=col;c.beginPath();c.arc(px(S.t),py(f(v,S.t)),5,0,7);c.fill()});
+}
+
+// ---------- 5. ARRASTRAR LAS GRÁFICAS = MOVER EL TIEMPO ----------
+['cx','cv'].forEach(id=>{
+ const c=$(id),move=e=>{
+  const r=c.getBoundingClientRect(),pw=r.width-PAD.l-PAD.r;
+  let t=Math.max(0,Math.min(S.tmax,(e.clientX-r.left-PAD.l)/pw*S.tmax));
+  const hit=R.r.find(x=>Math.abs(x-t)<S.tmax*.015); // imán: se pega al instante exacto del encuentro
+  S.t=hit??t;draw();
+ };
+ c.onpointerdown=e=>{play(false);c.setPointerCapture(e.pointerId);c.drag=1;move(e)};
+ c.onpointermove=e=>c.drag&&move(e);
+ c.onpointerup=()=>c.drag=0;
+});
+$('ts').oninput=e=>{play(false);S.t=+e.target.value;draw()};
+
+// ---------- 6. PANTALLA, REPORTE Y ANIMACIÓN ----------
+function draw(){
+ const t=S.t,en=R.r.filter(x=>x<=S.tmax+1e-9),near=en.find(x=>Math.abs(x-t)<Math.max(.3,S.tmax*.02)),
+  xa=pos(S.A,t),xb=pos(S.B,t),b=$('ban');
+ $('ts').max=S.tmax;$('ts').value=t;
+ $('hud').innerHTML=`t = <b>${t.toFixed(2)} s</b> · Separación |Δx| = <b>${Math.abs(xa-xb).toFixed(2)} m</b> · Vel. relativa = <b>${Math.abs(vel(S.A,t)-vel(S.B,t)).toFixed(2)} m/s</b>`;
+ b.className='card '+(near!=null?'flash':R.r.length?'ok':'no');
+ b.innerHTML=near!=null?`🎯 <b>¡ENCUENTRO!</b> t = ${near.toFixed(2)} s · x = ${pos(S.A,near).toFixed(2)} m`
+  :R.same?'🤝 Trayectorias idénticas'
+  :R.r.length?'🎯 '+R.r.map((x,i)=>`Encuentro ${i+1}: t = ${x.toFixed(2)} s, x = ${pos(S.A,x).toFixed(2)} m${x>S.tmax?' (fuera de t_max)':''}`).join(' | ')
+  :'🚫 Los vehículos nunca se encuentran (t > 0)';
+ track(near,en);chart('cx',pos);chart('cv',vel);
+}
+function report(){
+ const f=n=>n.toFixed(2),A=S.A,B=S.B,e=R.r[0]??S.tmax,
+  eq=(n,v)=>`x<sub>f${n}</sub>(t) = ${f(v.xi)} + (${f(v.vi)})·t${v.mru?'':` + ½(${f(v.a)})·t²`}`,
+  ver=v=>{const a=acc(v),vf=v.vi+a*e;return[vf,pos(v,e),v.xi+.5*(vf+v.vi)*e,a?v.xi+(vf*vf-v.vi*v.vi)/(2*a):NaN]},
+  vA=ver(A),vB=ver(B),n=x=>isNaN(x)?'a = 0 → no aplica':x.toFixed(4),
+  F=['v<sub>f</sub> = v<sub>i</sub> + a·t','x<sub>f</sub> = x<sub>i</sub> + v<sub>i</sub>·t + ½·a·t²','x<sub>f</sub> = x<sub>i</sub> + ½(v<sub>f</sub> + v<sub>i</sub>)·t','x<sub>f</sub> = x<sub>i</sub> + (v<sub>f</sub>² − v<sub>i</sub>²)/(2a)'],
+  ts=[...Array(11)].map((_,i)=>S.tmax*i/10).concat(R.r.filter(x=>x<=S.tmax)).sort((x,y)=>x-y);
+ $('rep').innerHTML=`<h3>1. Ecuaciones particulares</h3><p style="color:${AC}">${eq('A',A)}</p><p style="color:${BC}">${eq('B',B)}</p>
+ <h3>2. Resolución: x<sub>fA</sub> = x<sub>fB</sub></h3>
+ <p>½(a<sub>A</sub>−a<sub>B</sub>)t² + (v<sub>A</sub>−v<sub>B</sub>)t + (x<sub>A</sub>−x<sub>B</sub>) = 0 → A = ${f(R.q)}, B = ${f(R.b)}, C = ${f(R.c)}${R.d!=null?`, Δ = B²−4AC = ${f(R.d)}`:''}</p>
+ ${R.all.map(t=>`<p class="${t>0?'okc':'noc'}">t = ${t.toFixed(4)} s → ${t>0?`x = ${f(pos(A,t))} m ✓ válida`:'✗ descartada (t ≤ 0)'}</p>`).join('')||'<p class="noc">Sin solución real: no hay encuentro.</p>'}
+ <h3>3. Comprobación con las 4 fórmulas (t = ${e.toFixed(4)} s)</h3>
+ <div class="tbl"><table><tr><th>Fórmula</th><th>Vehículo A</th><th>Vehículo B</th></tr>${F.map((s,i)=>`<tr><td>${s}</td><td>${n(vA[i])}</td><td>${n(vB[i])}</td></tr>`).join('')}</table></div>
+ <h3 style="margin-top:12px">4. Tabla de valores</h3>
+ <div class="tbl"><table><tr><th>t (s)</th><th>x<sub>A</sub> (m)</th><th>v<sub>A</sub> (m/s)</th><th>x<sub>B</sub> (m)</th><th>v<sub>B</sub> (m/s)</th><th>|Δx| (m)</th></tr>
+ ${ts.map(t=>`<tr class="${R.r.includes(t)?'hit':''}"><td>${f(t)}${R.r.includes(t)?' 🎯':''}</td><td>${f(pos(A,t))}</td><td>${f(vel(A,t))}</td><td>${f(pos(B,t))}</td><td>${f(vel(B,t))}</td><td>${f(Math.abs(pos(A,t)-pos(B,t)))}</td></tr>`).join('')}</table></div>`;
+}
+const update=()=>{analyze();report();draw()};
+
+function play(on){
+ S.play=on;$('bPlay').textContent=on?'⏸ Pausar':'▶ Iniciar';
+ if(on){if(S.t>=S.tmax)S.t=0;last=performance.now();requestAnimationFrame(loop)}
+}
+function loop(now){
+ if(!S.play)return;
+ S.t=Math.min(S.tmax,S.t+(now-last)/1000*$('spd').value);last=now;draw();
+ S.t>=S.tmax?play(false):requestAnimationFrame(loop);
+}
+$('bPlay').onclick=()=>play(!S.play);
+$('bReset').onclick=()=>{play(false);S.t=0;draw()};
+$('bEnc').onclick=()=>{const t=R.r[0];if(t==null)return;play(false);if(t>S.tmax){S.tmax=Math.ceil(t*1.15);sync()}S.t=t;update()};
+addEventListener('resize',()=>draw());
+
+// ---------- 7. INICIO ----------
+preset('pursuit');
+</script>
+</body>
+</html>
