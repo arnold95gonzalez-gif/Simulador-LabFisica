@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laboratorio Virtual de Cinemática | Simuladores de Física</title>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --card-bg: #1e293b;
+            --card-hover: #283548;
+            --primary: #38bdf8;
+            --accent: #818cf8;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(rgba(56, 189, 248, 0.08) 1px, transparent 1px),
+                radial-gradient(rgba(129, 140, 248, 0.05) 1px, var(--bg-dark) 1px);
+            background-size: 32px 32px;
+            background-position: 0 0, 16px 16px;
+        }
+
+        header {
+            text-align: center;
+            padding: 4rem 1.5rem 2.5rem;
+            max-width: 850px;
+            margin: 0 auto;
+        }
+
+        .badge {
+            display: inline-block;
+            background: rgba(56, 189, 248, 0.15);
+            color: var(--primary);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            padding: 0.35rem 0.9rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-bottom: 1rem;
+        }
+
+        h1 {
+    font-size: 2.5rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 1rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            line-height: 1.6;
+        }
+
+        .formula-bar {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+            margin-top: 1.5rem;
+            font-family: 'Cambria Math', 'Times New Roman', serif;
+            font-style: italic;
+            color: var(--primary);
+            font-size: 1.05rem;
+            opacity: 0.85;
+        }
+
+        main {
+            flex: 1;
+            max-width: 1100px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        /* Cuadrícula adaptable: agrega automáticamente nuevas filas al añadir tarjetas */
+        .simulators-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.75rem;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            text-decoration: none;
+            color: inherit;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            transition: all 0.25s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), var(--accent));
+            opacity: 0;
+            transition: opacity 0.25s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            background-color: var(--card-hover);
+            border-color: var(--primary);
+            box-shadow: 0 12px 30px -10px rgba(0, 0, 0, 0.5);
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.25rem;
+        }
+
+        .icon-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(56, 189, 248, 0.12);
+            color: var(--primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .tag {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 0.25rem 0.65rem;
+            border-radius: 6px;
+            background: rgba(129, 140, 248, 0.15);
+            color: var(--accent);
+        }
+
+        .card h2 {
+            font-size: 1.35rem;
+            margin-bottom: 0.75rem;
+            color: var(--text-main);
+        }
+
+        .card p {
+            color: var(--text-muted);
+            font-size: 0.95rem;
+            line-height: 1.55;
+            margin-bottom: 1.75rem;
+        }
+
+        .card-footer {
+            display: flex;
+            align-items: center;
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--primary);
+            gap: 0.5rem;
+        }
+
+        .card-footer span {
+            transition: transform 0.2s ease;
+        }
+
+        .card:hover .card-footer span {
+            transform: translateX(5px);
+        }
+
+        /* Estilo opcional para tarjetas futuras en desarrollo */
+        .card.upcoming {
+            border-style: dashed;
+            opacity: 0.65;
+            cursor: default;
+        }
+
+        .card.upcoming:hover {
+            transform: none;
+            background-color: var(--card-bg);
+            border-color: var(--border);
+            box-shadow: none;
+        }
+
+        .card.upcoming::before {
+            display: none;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-muted);
+            font-size: 0.875rem;
+            border-top: 1px solid rgba(51, 65, 85, 0.5);
+            margin-top: 3rem;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="badge">Física · Mecánica Clásica</div>
+        <h1>Laboratorio Virtual de Cinemática</h1>
+        <p>Entorno interactivo para el análisis, modelado matemático y visualización gráfica de trayectorias, tiempos de alcance y puntos de encuentro.</p>
+        <div class="formula-bar">
+            <span>x(t) = x₀ + v₀t</span>
+            <span>•</span>
+            <span>x(t) = x₀ + v₀t + ½at²</span>
+            <span>•</span>
+            <span>v(t) = v₀ + at</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="simulators-grid">
+
+            <!-- SIMULADOR 1 -->
+            <a href="persecuciones.html" class="card">
+                <div>
+                    <div class="card-header">
+                        <div class="icon-box">🏎️</div>
+                        <span class="tag">Cinemática 1D</span>
+                    </div>
+                    <h2>Simulador de Persecuciones</h2>
+                    <p>Analiza escenarios donde un móvil intenta alcanzar a otro con ventaja inicial. Evalúa tiempos de captura, distancias recorridas y condiciones límite de alcance.</p>
+                </div>
+                <div class="card-footer">
+                    Iniciar simulación <span>→</span>
+                </div>
+            </a>
+
+            <!-- SIMULADOR 2 -->
+            <a href="simulador_de_persecuciones_y_encuentros_mru_y_mrua.html" class="card">
+                <div>
+                    <div class="card-header">
+                        <div class="icon-box">📈</div>
+                        <span class="tag">MRU & MRUA</span>
+                    </div>
+                    <h2>Persecuciones y Encuentros (MRU / MRUA)</h2>
+                    <p>Modelado completo con velocidad constante y aceleración uniforme. Incluye personalización de vehículos, gráficas en tiempo real y reportes analíticos detallados.</p>
+                </div>
+                <div class="card-footer">
+                    Iniciar simulación <span>→</span>
+                </div>
+            </a>
+
+            <!-- =====================================================================
+                 PLANTILLA PARA AGREGAR NUEVOS SIMULADORES EN EL FUTURO:
+                 Solo copia este bloque <a href="...">...</a>, quita la clase "upcoming"
+                 y cambia el enlace, ícono, etiqueta, título y descripción.
+            ====================================================================== -->
+            <div class="card upcoming">
+                <div>
+                    <div class="card-header">
+                        <div class="icon-box">🧪</div>
+                        <span class="tag">Próximamente</span>
+                    </div>
+                    <h2>Nuevo Módulo de Física</h2>
+                    <p>Espacio reservado para futuras prácticas de laboratorio (Caída libre, tiro parabólico, dinámica o leyes de Newton).</p>
+                </div>
+                <div class="card-footer" style="color: var(--text-muted);">
+                    En desarrollo...
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer>
+        Suite de Simuladores Interactivos de Física · Selecciona un módulo para comenzar
+    </footer>
+
+</body>
+</html>
